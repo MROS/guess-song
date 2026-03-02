@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 
 const geminiApiKey = process.env.GEMINI_API_KEY;
-const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 
 const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
@@ -17,9 +16,9 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!geminiApiKey || !youtubeApiKey) {
+        if (!geminiApiKey) {
             return NextResponse.json(
-                { error: "Missing API keys in environment variables" },
+                { error: "Missing Gemini API key in environment variables" },
                 { status: 500 }
             );
         }
@@ -63,34 +62,31 @@ export async function POST(req: Request) {
             );
         }
 
-        // 2. Map youtube video IDs
+        // 2. Map iTunes Search API preview URLs
         const resultSongs = await Promise.all(
             songs.map(async (song) => {
-                const query = `${song.artist} ${song.title} official music video`;
-                const ytRes = await fetch(
-                    `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(
+                const query = `${song.artist} ${song.title}`;
+                const itunesRes = await fetch(
+                    `https://itunes.apple.com/search?term=${encodeURIComponent(
                         query
-                    )}&key=${youtubeApiKey}&type=video&maxResults=1&videoEmbeddable=true`
+                    )}&entity=song&limit=1`
                 );
-                const ytData = await ytRes.json();
+                const itunesData = await itunesRes.json();
 
                 // default to empty if not found
-                let videoId = "";
-                if (ytData.items && ytData.items.length > 0) {
-                    videoId = ytData.items[0].id.videoId;
+                let previewUrl = "";
+                let trackViewUrl = "";
+                if (itunesData.results && itunesData.results.length > 0) {
+                    previewUrl = itunesData.results[0].previewUrl;
+                    trackViewUrl = itunesData.results[0].trackViewUrl;
                 } else {
-                    console.log("YouTube API returned no items:", JSON.stringify(ytData, null, 2));
-                    if (ytData.error) {
-                        console.error("YouTube API Error:", ytData.error.message);
-                        if (ytData.error.message.includes("quota")) {
-                            throw new Error("YouTube API 配額已用盡");
-                        }
-                    }
+                    console.log("iTunes API returned no items for query:", query);
                 }
 
                 return {
                     ...song,
-                    videoId,
+                    previewUrl,
+                    trackViewUrl,
                 };
             })
         );

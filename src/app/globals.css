@@ -48,6 +48,7 @@ body {
   margin-bottom: 0.5rem;
   background: linear-gradient(to right, #60a5fa, #f43f5e);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -188,27 +189,26 @@ button:active {
   border-radius: 1rem;
   overflow: hidden;
   position: relative;
-  background: #000;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   transition: all 0.5s ease;
 }
 
-/* HINT state - hide video visually but keep player active */
-.video-container.hint-mode {
-  opacity: 0.01;
-  pointer-events: none;
-  /* Instead of height 0 which might break YouTube iframe initialization */
-  position: absolute;
-  top: -9999px;
-  left: -9999px;
+/* HINT state - show a music icon */
+.video-container.hint-mode::before {
+  content: '🎵';
+  font-size: 4rem;
+  animation: pulse 2s infinite;
 }
 
-/* Ensure the player covers container in Reveal mode */
-.youtube-embed {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+.html5-audio {
+  width: 90%;
+  max-width: 400px;
+  z-index: 10;
 }
 
 .controls-container {
@@ -232,6 +232,7 @@ button:active {
   font-size: 1.8rem;
   background: linear-gradient(to right, #60a5fa, #a78bfa);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
 }

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import YouTube, { YouTubePlayer, YouTubeEvent } from "react-youtube";
 
 type Song = {
     title: string;
     artist: string;
-    videoId: string;
+    previewUrl?: string;
+    trackViewUrl?: string;
 };
 
 type GameState = "SETUP" | "LOADING" | "HINT" | "REVEAL" | "END";
@@ -19,10 +19,10 @@ export default function GameInterface() {
     const [currentSongIndex, setCurrentSongIndex] = useState(0);
 
     // Hint Phase variables
-    const [player, setPlayer] = useState<YouTubePlayer | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const [timeRemaining, setTimeRemaining] = useState(10);
+    const [isPlaying, setIsPlaying] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const [isPlayerReady, setIsPlayerReady] = useState(false);
 
     const startSetup = async () => {
         if (!theme) return alert("請輸入主題");
@@ -38,16 +38,15 @@ export default function GameInterface() {
 
             setSongs(data.songs);
             setCurrentSongIndex(0);
-            setGameState("HINT");
             setTimeRemaining(10);
-            setIsPlayerReady(false);
+            setIsPlaying(false);
+            setGameState("HINT");
         } catch (err: any) {
             console.error(err);
             let errorMsg = err.message || "發生未知錯誤";
 
-            // Handle the raw Google API JSON error string if it exists
             if (errorMsg.includes("429") || errorMsg.includes("Quota exceeded")) {
-                errorMsg = "呼叫次數過於頻繁或已超過免費配額，請稍後再試或檢查 API Key 的計費狀態。";
+                errorMsg = "呼叫次數過於頻繁或已超過免費配額，請稍後再試。";
             }
 
             alert("生成歌曲失敗：\n" + errorMsg);
@@ -57,15 +56,15 @@ export default function GameInterface() {
 
     const currentSong = songs[currentSongIndex];
 
-    // Tick the timer every second during HINT phase
+    // Tick the timer every second during HINT phase when audio is playing
     useEffect(() => {
-        if (gameState === "HINT" && isPlayerReady) {
+        if (gameState === "HINT" && isPlaying) {
             timerRef.current = setInterval(() => {
                 setTimeRemaining((prev) => {
                     if (prev <= 1) {
                         // Timer ended, but wait for user to click reveal
-                        if (player) {
-                            player.pauseVideo();
+                        if (audioRef.current) {
+                            audioRef.current.pause();
                         }
                         return 0;
                     }
@@ -77,42 +76,32 @@ export default function GameInterface() {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [gameState, isPlayerReady, player]);
+    }, [gameState, isPlaying]);
 
-    const onPlayerReady = (event: YouTubeEvent) => {
-        const p = event.target;
-        setPlayer(p);
-
-        if (gameState === "HINT") {
-            const duration = p.getDuration();
-            // Random start time, ensuring at least 15 seconds to play if possible
-            const maxStart = Math.max(0, duration - 15);
-            const randomStart = Math.floor(Math.random() * maxStart);
-
-            p.seekTo(randomStart, true);
-            p.playVideo();
-            setIsPlayerReady(true);
-            setTimeRemaining(10); // Reset time to 10 when a new song starts
+    // Autoplay when transitioning to HINT
+    useEffect(() => {
+        if (gameState === "HINT" && currentSong?.previewUrl && audioRef.current) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().then(() => {
+                setIsPlaying(true);
+            }).catch(e => {
+                console.error("Audio playback failed automatically:", e);
+            });
         }
-    };
-
-    // Re-run player logic if current song changes but player is already ready?
-    // react-youtube recreates the player or calls onReady when videoId changes
-    // so we rely on onReady mostly. But we can also handle it here.
+    }, [gameState, currentSongIndex, currentSong]);
 
     const addTime = () => {
         setTimeRemaining((prev) => prev + 5);
-        if (player && timeRemaining === 0) {
-            // If it was paused, resume it
-            player.playVideo();
+        if (audioRef.current && timeRemaining === 0) {
+            audioRef.current.play().catch(e => console.error(e));
         }
     };
 
     const reveal = () => {
         if (timerRef.current) clearInterval(timerRef.current);
         setGameState("REVEAL");
-        if (player) {
-            player.playVideo(); // ensure playing in reveal
+        if (audioRef.current) {
+            audioRef.current.play().catch(e => console.error(e));
         }
     };
 
@@ -120,8 +109,8 @@ export default function GameInterface() {
         if (currentSongIndex < songs.length - 1) {
             setCurrentSongIndex((prev) => prev + 1);
             setGameState("HINT");
-            setIsPlayerReady(false);
             setTimeRemaining(10);
+            setIsPlaying(false);
         } else {
             setGameState("END");
         }
@@ -133,9 +122,10 @@ export default function GameInterface() {
         setGameState("SETUP");
         setSongs([]);
         setCurrentSongIndex(0);
+        if (audioRef.current) {
+            audioRef.current.pause();
+        }
     };
-
-    // Render logic...
 
     return (
         <div className="game-container">
@@ -186,30 +176,27 @@ export default function GameInterface() {
                     <div
                         className={`video-container ${gameState === "HINT" ? "hint-mode" : ""}`}
                     >
-                        {/* YouTube player is always rendered to preload, just hidden visually during HINT */}
-                        <YouTube
-                            videoId={currentSong.videoId || ""}
-                            opts={{
-                                width: "100%",
-                                height: "100%",
-                                playerVars: {
-                                    autoplay: 1,
-                                    controls: gameState === "REVEAL" ? 1 : 0, // hide controls during HINT
-                                    origin: typeof window !== "undefined" ? window.location.origin : undefined,
-                                },
-                            }}
-                            onReady={onPlayerReady}
-                            onError={(e) => {
-                                console.error("YouTube Player Error", e.data);
-                                // If video cannot be played, we can skip or reveal
-                                // Let's just alert the user or auto-reveal the song
-                                if (gameState === "HINT") {
-                                    alert(`影片無法播放 (ID: ${currentSong.videoId})，請直接揭曉或換下一首。`);
-                                    reveal();
-                                }
-                            }}
-                            className="youtube-embed"
-                        />
+                        {currentSong.previewUrl ? (
+                            <audio
+                                ref={audioRef}
+                                src={currentSong.previewUrl}
+                                controls={gameState === "REVEAL"}
+                                className="html5-audio"
+                                style={{ width: '100%', marginTop: gameState === "REVEAL" ? '20px' : '0' }}
+                                onPlay={() => setIsPlaying(true)}
+                                onPause={() => setIsPlaying(false)}
+                                onError={() => {
+                                    if (gameState === "HINT") {
+                                        alert('音訊無法播放，請直接揭曉或換下一首。');
+                                        reveal();
+                                    }
+                                }}
+                            />
+                        ) : (
+                            <div className="no-audio-msg" style={{ padding: '20px', textAlign: 'center', color: '#ffaaaa' }}>
+                                找不到此歌曲的試聽音源 😢
+                            </div>
+                        )}
                     </div>
 
                     <div className="controls-container">
@@ -228,6 +215,11 @@ export default function GameInterface() {
                             <div className="reveal-info animate-slide-up">
                                 <h3>{currentSong.title}</h3>
                                 <p>{currentSong.artist}</p>
+                                {currentSong.trackViewUrl && (
+                                    <a href={currentSong.trackViewUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary mt-2" style={{ display: 'inline-block', fontSize: '14px', padding: '8px 16px', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none', borderRadius: '4px' }}>
+                                        在 Apple Music 聆聽
+                                    </a>
+                                )}
                                 <div className="actions mt-4">
                                     <button className="btn-primary" onClick={nextSong}>
                                         下一首
