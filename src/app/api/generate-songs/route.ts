@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 
-const geminiApiKey = process.env.GEMINI_API_KEY;
-
-const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+const serverGeminiApiKey = process.env.GEMINI_API_KEY;
 
 export async function POST(req: Request) {
     try {
@@ -16,12 +14,17 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!geminiApiKey) {
+        const customGeminiKey = req.headers.get("x-gemini-key");
+        const activeApiKey = customGeminiKey || serverGeminiApiKey;
+
+        if (!activeApiKey) {
             return NextResponse.json(
-                { error: "Missing Gemini API key in environment variables" },
+                { error: "Server missing Gemini API key and no custom key provided." },
                 { status: 500 }
             );
         }
+
+        const ai = new GoogleGenAI({ apiKey: activeApiKey });
 
         // 1. Generate song list using Gemini
         const prompt = `根據主題「${theme}」提供 ${count} 首歌曲。`;

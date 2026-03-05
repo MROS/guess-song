@@ -24,13 +24,24 @@ export default function GameInterface() {
     const [isPlaying, setIsPlaying] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Custom API Key
+    const [userGeminiKey, setUserGeminiKey] = useState("");
+
+    useEffect(() => {
+        const storedKey = localStorage.getItem("userGeminiKey");
+        if (storedKey) setUserGeminiKey(storedKey);
+    }, []);
+
     const startSetup = async () => {
         if (!theme) return alert("請輸入主題");
         setGameState("LOADING");
         try {
             const res = await fetch("/api/generate-songs", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-gemini-key": userGeminiKey || ""
+                },
                 body: JSON.stringify({ theme, count }),
             });
             const data = await res.json();
@@ -43,12 +54,13 @@ export default function GameInterface() {
             setGameState("HINT");
         } catch (err: any) {
             console.error(err);
-            let errorMsg = err.message || "發生未知錯誤";
-
-            if (errorMsg.includes("429") || errorMsg.includes("Quota exceeded")) {
-                errorMsg = "呼叫次數過於頻繁或已超過免費配額，請稍後再試。";
+            if (err.message === "QUOTA_EXCEEDED" || err.message?.includes("429")) {
+                alert("系統預設的免費配額已耗盡！請在下方進階設定中，輸入您自己的 Gemini API Key 以繼續遊玩。");
+                setGameState("SETUP");
+                return;
             }
 
+            let errorMsg = err.message || "發生未知錯誤";
             alert("生成歌曲失敗：\n" + errorMsg);
             setGameState("SETUP");
         }
@@ -149,6 +161,28 @@ export default function GameInterface() {
                             onChange={(e) => setCount(Number(e.target.value))}
                             min={1}
                             max={20}
+                        />
+                    </div>
+                    <div className="input-group">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>自訂 Gemini API Key (選填)</span>
+                            <a
+                                href="https://ai.google.dev/gemini-api/docs/api-key?hl=zh-tw"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ fontSize: '13px', color: '#60a5fa', textDecoration: 'underline', fontWeight: 'normal' }}
+                            >
+                                去哪裏申請？
+                            </a>
+                        </label>
+                        <input
+                            type="password"
+                            value={userGeminiKey}
+                            onChange={(e) => {
+                                setUserGeminiKey(e.target.value);
+                                localStorage.setItem("userGeminiKey", e.target.value);
+                            }}
+                            placeholder="若無則使用系統預設... (儲存於瀏覽器)"
                         />
                     </div>
                     <button className="btn-primary" onClick={startSetup}>
