@@ -47,6 +47,14 @@ export default function GameInterface() {
             const data = await res.json();
             if (data.error) throw new Error(data.error);
 
+            if (data.songs.length === 0) {
+                alert("完全找不到符合的歌曲，請嘗試更換主題！");
+                setGameState("SETUP");
+                return;
+            } else if (data.songs.length < count) {
+                alert(`提示：無法在音樂資料庫中找到足夠多符合主題且有試聽音源的歌曲，我們將以找到的 ${data.songs.length} 首進行遊戲！`);
+            }
+
             setSongs(data.songs);
             setCurrentSongIndex(0);
             setTimeRemaining(10);
@@ -54,6 +62,11 @@ export default function GameInterface() {
             setGameState("HINT");
         } catch (err: any) {
             console.error(err);
+            if (err.message === "ITUNES_429") {
+                alert("Apple 音樂庫目前存取過於頻繁 (429 Too Many Requests)，請稍候幾分鐘再重試喔！");
+                setGameState("SETUP");
+                return;
+            }
             if (err.message === "QUOTA_EXCEEDED" || err.message?.includes("429")) {
                 alert("系統預設的免費配額已耗盡！請在下方進階設定中，輸入您自己的 Gemini API Key 以繼續遊玩。");
                 setGameState("SETUP");
